@@ -68,3 +68,64 @@ class ConcatError(BaseModel):
 
     ok: Literal[False] = False
     error: str
+
+
+class TemplateBaseRequest(BaseModel):
+    """Shared fields for template-based workflows."""
+
+    job_id: str = Field(..., min_length=1, description="Draft name to create")
+    drafts_root: Path = Field(..., description="Absolute path to Jianying drafts root")
+    template_name: str = Field(..., min_length=1, description="Template draft name in drafts_root")
+    template_path: Optional[Path] = Field(
+        default=None,
+        description="Optional path to template draft_content.json (defaults to server template)",
+    )
+    output_path: Path = Field(..., description="Absolute mp4 output file path")
+    fps: int = Field(..., gt=0, description="Export frame rate")
+    video_track_index: int = Field(
+        default=0,
+        ge=0,
+        description="Video track index in template (default 0)",
+    )
+
+    @field_validator("job_id")
+    @classmethod
+    def validate_job_id(cls, value: str) -> str:
+        invalid = set('<>:"/\\|?*')
+        if any(ch in invalid for ch in value):
+            raise ValueError("job_id contains invalid Windows characters")
+        return value.strip()
+
+
+class TemplateReplacement(BaseModel):
+    """One segment replacement entry."""
+
+    segment_index: int = Field(..., ge=0, description="Segment index in target video track")
+    path: Path = Field(..., description="Absolute path to replacement media")
+
+
+class TemplateReplaceRequest(TemplateBaseRequest):
+    """Replace template segments by index."""
+
+    replacements: List[TemplateReplacement] = Field(
+        ..., min_length=1, description="Replacement list for template segments"
+    )
+
+
+class TemplateFillRequest(TemplateBaseRequest):
+    """Fill template segments sequentially using assets list."""
+
+    assets: List[Path] = Field(..., min_length=1, description="Asset list to fill segments")
+    fill_strategy: Literal["error", "cycle"] = Field(
+        default="error",
+        description="How to handle assets shorter than segments list",
+    )
+
+
+class TemplateSuccess(BaseModel):
+    """Template workflow success response."""
+
+    ok: Literal[True] = True
+    job_id: str
+    draft_name: str
+    output_path: Path
